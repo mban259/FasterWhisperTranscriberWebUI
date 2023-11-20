@@ -37,7 +37,7 @@ def is_speech(wave: np.ndarray[np.float32], threshold: np.float32):
     return np.max(np.abs(wave)) > threshold
 
 
-def transcribe(state: StateClass, mic: Tuple[int, np.ndarray], volume: float, threshold: float) -> Tuple[StateClass, str, bool]:
+def transcribe(state: StateClass, mic: Tuple[int, np.ndarray], volume: float, threshold: float, language: str) -> Tuple[StateClass, str, bool]:
     sampleRate, rawWave = mic
 
     # ステレオならモノラルに変換
@@ -57,17 +57,23 @@ def transcribe(state: StateClass, mic: Tuple[int, np.ndarray], volume: float, th
 
     flag_speech = is_speech(wave, threshold)
 
+    if language == "ja":
+        lang = "ja"
+    else:
+        lang = None
+
     if not state.is_speech:
         if flag_speech:
             state.is_speech = True
             state.buffer = wave
         res = state.to_str()
     else:
-        
+
         if flag_speech:
             state.buffer = np.concatenate([state.buffer, wave])
             if state.buffer.shape[0] - state.last_transcribe > 2 * WHISPER_SAMPLING_RATE:
-                segments, info = model.transcribe(state.buffer, word_timestamps=True)
+                segments, info = model.transcribe(
+                    state.buffer, word_timestamps=True, language=lang)
                 copy_text_list = copy.copy(state.textList)
                 for seg in segments:
                     copy_text_list.append("{}".format(seg.text))
@@ -76,7 +82,8 @@ def transcribe(state: StateClass, mic: Tuple[int, np.ndarray], volume: float, th
             else:
                 res = state.to_str()
         else:
-            segments, info = model.transcribe(state.buffer, word_timestamps=True)
+            segments, info = model.transcribe(
+                state.buffer, word_timestamps=True, language=lang)
             state.is_speech = False
             for seg in segments:
                 state.textList.append("{}".format(seg.text))
@@ -92,18 +99,22 @@ def reset(state: StateClass) -> Tuple[StateClass, str]:
 
 with gr.Blocks() as demo:
     state = gr.State(value=StateClass())
-    mic = gr.Audio(sources="microphone")
-    output = gr.Textbox(value="", label="output")
-
-    with gr.Row():
-        # inference_len = gr.Number(value=20)
+    with gr.Tab("main"):
+        with gr.Row():
+            with gr.Column():
+                mic = gr.Audio(sources="microphone")
+                speaking = gr.Checkbox(label="speaking")
+                reset_button = gr.Button("reset")
+            output = gr.Textbox(value="", label="output")
+    with gr.Tab("settings"):
         threshold = gr.Slider(minimum=0.01, maximum=1.0,
                               value=0.1, label="threshold")
         volume = gr.Slider(minimum=0.01, maximum=1.0,
                            value=0.8, label="volume")
+        language = gr.Dropdown(
+            choices=["None", "ja"], label="language", value="None", filterable=False)
 
-    speaking = gr.Checkbox(label="speaking")
-    reset_button = gr.Button("reset")
+    
 
     reset_button.click(
         fn=reset,
@@ -113,7 +124,7 @@ with gr.Blocks() as demo:
 
     mic.stream(
         fn=transcribe,
-        inputs=[state, mic, volume, threshold],
+        inputs=[state, mic, volume, threshold, language],
         outputs=[state, output, speaking],
         show_progress=False
     )
