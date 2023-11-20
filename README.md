@@ -2,7 +2,7 @@
 
 ```shell
 $ pip install faster-whisper gradio scipy
-
+$ python main.py
 ```
 
 
