@@ -6,6 +6,8 @@ from scipy import signal
 from scipy.io import wavfile
 import argparse
 import copy
+import json
+import os
 
 
 MODEL_SIZE: Final[str] = "large-v2"
@@ -97,6 +99,28 @@ def reset(state: StateClass) -> Tuple[StateClass, str]:
     return state, ""
 
 
+def save(threshold: float, volume: float, language: str):
+    js = {}
+    js["threshold"] = threshold
+    js["volume"] = volume
+    js["language"] = language
+
+    with open("setting.json", mode="wt") as f:
+        json.dump(js, f)
+    pass
+
+
+if os.path.isfile("setting.json"):
+    with open("setting.json") as f:
+        js = json.load(f)
+        val_threshold = js["threshold"]
+        val_volume = js["volume"]
+        val_language = js["language"] 
+else:
+    val_threshold = 0.1
+    val_volume = 0.8
+    val_language = "None"
+
 with gr.Blocks() as demo:
     state = gr.State(value=StateClass())
     with gr.Tab("main"):
@@ -108,13 +132,12 @@ with gr.Blocks() as demo:
             output = gr.Textbox(value="", label="output")
     with gr.Tab("settings"):
         threshold = gr.Slider(minimum=0.01, maximum=1.0,
-                              value=0.1, label="threshold")
+                              value=val_threshold, label="threshold")
         volume = gr.Slider(minimum=0.01, maximum=1.0,
-                           value=0.8, label="volume")
+                           value=val_volume, label="volume")
         language = gr.Dropdown(
-            choices=["None", "ja"], label="language", value="None", filterable=False)
-
-    
+            choices=["None", "ja"], label="language", value=val_language, filterable=False)
+        save_button = gr.Button("save")
 
     reset_button.click(
         fn=reset,
@@ -133,6 +156,10 @@ with gr.Blocks() as demo:
         cancels=[transcribe]
     )
 
+    save_button.click(
+        save,
+        inputs=[threshold, volume, language]
+    )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
